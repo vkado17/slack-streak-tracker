@@ -1,1 +1,3 @@
-
+slack_sdk
+notion-client
+requests
