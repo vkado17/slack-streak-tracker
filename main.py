@@ -11,7 +11,7 @@ NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DB_ID = os.getenv("NOTION_DB_ID")
 SLACK_TOKEN = os.getenv("SLACK_TOKEN")
 DUB_API_KEY = os.getenv("DUB_API_KEY")
-DUB_DOMAIN = "friend.boardy.ai"  # customize here if needed
+DUB_DOMAIN = "friend.boardy.ai"
 
 # --- Initialize clients ---
 slack_client = WebClient(token=SLACK_TOKEN)
@@ -42,10 +42,10 @@ def get_notion_users():
         start_cursor = response.get("next_cursor")
     return results
 
-# --- Helper: Get all public Slack channel IDs ---
+# --- Helper: Get all public + private Slack channel IDs ---
 def get_channel_ids():
     try:
-        response = slack_client.conversations_list(types="public_channel")
+        response = slack_client.conversations_list(types="public_channel,private_channel")
         return [channel["id"] for channel in response["channels"]]
     except SlackApiError as e:
         print("Error fetching channels:", e)
@@ -53,6 +53,7 @@ def get_channel_ids():
 
 # --- Helper: Did user post today? ---
 def did_user_post_today(user_id, channel_ids):
+    print(f"Checking if user {user_id} posted today...")
     for channel_id in channel_ids:
         try:
             response = slack_client.conversations_history(
@@ -62,10 +63,14 @@ def did_user_post_today(user_id, channel_ids):
                 limit=200
             )
             for message in response["messages"]:
-                if message.get("user") == user_id:
+                msg_user = message.get("user")
+                if msg_user == user_id:
+                    print(f"✅ Found message from {user_id} in channel {channel_id}")
                     return True
-        except SlackApiError:
+        except SlackApiError as e:
+            print(f"Slack error in channel {channel_id}: {e}")
             continue
+    print(f"❌ No message from {user_id} found today.")
     return False
 
 # --- Helper: Get Slack user ID from email ---
@@ -73,14 +78,15 @@ def get_user_id_by_email(email):
     try:
         response = slack_client.users_lookupByEmail(email=email)
         return response["user"]["id"]
-    except SlackApiError:
+    except SlackApiError as e:
+        print(f"Slack API error looking up email {email}: {e}")
         return None
 
 # --- Helper: Extract slug from Dub link URL ---
 def extract_slug(dub_url):
     try:
         parsed = urlparse(dub_url)
-        return parsed.path.strip("/").split("/")[0]  # e.g., 'Nihal'
+        return parsed.path.strip("/").split("/")[0]
     except:
         return None
 
@@ -112,7 +118,7 @@ def get_dub_clicks(dub_url):
 
 # --- Helper: Update Notion page with new values ---
 def update_notion_page(page_id, streak, last_active, clicks):
-    print(f"Updating Notion page: {page_id}")
+    print(f"🔁 Updating Notion page: {page_id}")
     print(f"→ Streak: {streak}, Last Active: {last_active}, Clicks: {clicks}")
     try:
         notion.pages.update(
@@ -131,6 +137,9 @@ def main():
     users = get_notion_users()
     channel_ids = get_channel_ids()
 
+    print(f"📡 Found {len(channel_ids)} Slack channels to scan.")
+    print(f"🧾 Found {len(users)} users in Notion DB.")
+
     for user in users:
         props = user["properties"]
         email = None
@@ -141,10 +150,12 @@ def main():
         last_streak = props["Streak Count"]["number"] or 0
 
         if not email:
+            print("⛔️ No email found for user row, skipping.")
             continue
 
         user_id = get_user_id_by_email(email)
         if not user_id:
+            print(f"⛔️ Could not find Slack user for {email}, skipping.")
             continue
 
         active_today = did_user_post_today(user_id, channel_ids)
