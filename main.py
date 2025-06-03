@@ -86,21 +86,27 @@ def extract_slug(dub_url):
 # --- Helper: Get click count from Dub.co ---
 def get_dub_clicks(dub_url):
     slug = extract_slug(dub_url)
+    print(f"Extracted slug: {slug}")
+
     if not slug:
         return 0
 
     headers = {
         "Authorization": f"Bearer {DUB_API_KEY}"
     }
+
     try:
         response = requests.get(f"https://api.dub.co/links/{slug}", headers=headers)
+        print(f"Dub API status: {response.status_code}")
+        print(f"Response body: {response.text}")
+
         if response.status_code == 200:
             return response.json().get("clicks", 0)
-        else:
-            print(f"DUB API error {response.status_code}: {response.text}")
     except Exception as e:
         print("Error fetching from Dub:", e)
+
     return 0
+
 
 # --- Helper: Update Notion page with new values ---
 def update_notion_page(page_id, streak, last_active, clicks):
