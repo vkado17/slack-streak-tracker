@@ -1,4 +1,5 @@
 import os
+import time
 import datetime
 import requests
 from urllib.parse import urlparse
@@ -24,7 +25,7 @@ end_of_day = datetime.datetime.combine(now.date(), datetime.time.max)
 start_ts = start_of_day.timestamp()
 end_ts = end_of_day.timestamp()
 
-# --- Helper: Get all rows in the Notion DB ---
+# --- Get all Notion rows ---
 def get_notion_users():
     results = []
     start_cursor = None
@@ -42,7 +43,7 @@ def get_notion_users():
         start_cursor = response.get("next_cursor")
     return results
 
-# --- Helper: Get all public + private Slack channel IDs ---
+# --- Get Slack channel IDs ---
 def get_channel_ids():
     try:
         response = slack_client.conversations_list(types="public_channel,private_channel")
@@ -51,7 +52,7 @@ def get_channel_ids():
         print("Error fetching channels:", e)
         return []
 
-# --- Helper: Did user post today? ---
+# --- Check if user posted today, with rate-limit handling ---
 def did_user_post_today(user_id, channel_ids):
     print(f"Checking if user {user_id} posted today...")
     for channel_id in channel_ids:
@@ -63,26 +64,25 @@ def did_user_post_today(user_id, channel_ids):
                 limit=200
             )
             for message in response["messages"]:
-                msg_user = message.get("user")
-                if msg_user == user_id:
+                if message.get("user") == user_id:
                     print(f"✅ Found message from {user_id} in channel {channel_id}")
                     return True
         except SlackApiError as e:
             print(f"Slack error in channel {channel_id}: {e}")
-            continue
+        time.sleep(1.1)  # Wait 1.1s to stay under rate limit
     print(f"❌ No message from {user_id} found today.")
     return False
 
-# --- Helper: Get Slack user ID from email ---
+# --- Slack email → user ID ---
 def get_user_id_by_email(email):
     try:
         response = slack_client.users_lookupByEmail(email=email)
         return response["user"]["id"]
     except SlackApiError as e:
-        print(f"Slack API error looking up email {email}: {e}")
+        print(f"Slack API error for {email}: {e}")
         return None
 
-# --- Helper: Extract slug from Dub link URL ---
+# --- Extract Dub slug ---
 def extract_slug(dub_url):
     try:
         parsed = urlparse(dub_url)
@@ -90,7 +90,7 @@ def extract_slug(dub_url):
     except:
         return None
 
-# --- Helper: Get click count from Dub.co ---
+# --- Get click count from Dub ---
 def get_dub_clicks(dub_url):
     slug = extract_slug(dub_url)
     print(f"Extracted slug: {slug}")
@@ -101,14 +101,12 @@ def get_dub_clicks(dub_url):
     headers = {
         "Authorization": f"Bearer {DUB_API_KEY}"
     }
-
     params = {"domain": DUB_DOMAIN}
 
     try:
         response = requests.get(f"https://api.dub.co/links/{slug}", headers=headers, params=params)
         print(f"Dub API status: {response.status_code}")
         print(f"Response body: {response.text}")
-
         if response.status_code == 200:
             return response.json().get("clicks", 0)
     except Exception as e:
@@ -116,7 +114,7 @@ def get_dub_clicks(dub_url):
 
     return 0
 
-# --- Helper: Update Notion page with new values ---
+# --- Update row in Notion ---
 def update_notion_page(page_id, streak, last_active, clicks):
     print(f"🔁 Updating Notion page: {page_id}")
     print(f"→ Streak: {streak}, Last Active: {last_active}, Clicks: {clicks}")
@@ -132,7 +130,7 @@ def update_notion_page(page_id, streak, last_active, clicks):
     except Exception as e:
         print(f"Error updating Notion page {page_id}:", e)
 
-# --- MAIN ---
+# --- Main loop ---
 def main():
     users = get_notion_users()
     channel_ids = get_channel_ids()
@@ -150,12 +148,12 @@ def main():
         last_streak = props["Streak Count"]["number"] or 0
 
         if not email:
-            print("⛔️ No email found for user row, skipping.")
+            print("⛔️ No email for user row, skipping.")
             continue
 
         user_id = get_user_id_by_email(email)
         if not user_id:
-            print(f"⛔️ Could not find Slack user for {email}, skipping.")
+            print(f"⛔️ Could not resolve Slack user for {email}")
             continue
 
         active_today = did_user_post_today(user_id, channel_ids)
