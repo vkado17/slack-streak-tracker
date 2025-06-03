@@ -11,6 +11,7 @@ NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DB_ID = os.getenv("NOTION_DB_ID")
 SLACK_TOKEN = os.getenv("SLACK_TOKEN")
 DUB_API_KEY = os.getenv("DUB_API_KEY")
+DUB_DOMAIN = "friend.boardy.ai"  # customize here if needed
 
 # --- Initialize clients ---
 slack_client = WebClient(token=SLACK_TOKEN)
@@ -95,8 +96,10 @@ def get_dub_clicks(dub_url):
         "Authorization": f"Bearer {DUB_API_KEY}"
     }
 
+    params = {"domain": DUB_DOMAIN}
+
     try:
-        response = requests.get(f"https://api.dub.co/links/{slug}", headers=headers)
+        response = requests.get(f"https://api.dub.co/links/{slug}", headers=headers, params=params)
         print(f"Dub API status: {response.status_code}")
         print(f"Response body: {response.text}")
 
@@ -107,9 +110,10 @@ def get_dub_clicks(dub_url):
 
     return 0
 
-
 # --- Helper: Update Notion page with new values ---
 def update_notion_page(page_id, streak, last_active, clicks):
+    print(f"Updating Notion page: {page_id}")
+    print(f"→ Streak: {streak}, Last Active: {last_active}, Clicks: {clicks}")
     try:
         notion.pages.update(
             page_id=page_id,
