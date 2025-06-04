@@ -1,30 +1,28 @@
-name: Daily Slack Streak Tracker
+name: Daily Notion Sync
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # Runs daily at 2:00 AM UTC
-  workflow_dispatch:      # Allows manual trigger
+    - cron: '0 8 * * *'  # Runs daily at 8:00 AM UTC = 12:00 AM PST
+  workflow_dispatch:     # Allows manual run
 
 jobs:
-  run-streak-check:
+  run-daily:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run main.py
+      - name: Run script
         run: python main.py
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          NOTION_DB_ID: ${{ secrets.NOTION_DB_ID }}
-          SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           DUB_API_KEY: ${{ secrets.DUB_API_KEY }}
