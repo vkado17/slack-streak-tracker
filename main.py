@@ -65,16 +65,18 @@ def get_clicks(slug):
             print(f"❌ Dub API status {res.status_code} for slug '{slug}' — {data}")
             return 0
 
-        clicks = data.get("totalCount")
-        if clicks is None:
-            print(f"⚠️ No totalCount found for slug '{slug}' — full response: {data}")
+        if "totalCount" in data:
+            return data["totalCount"]
+        elif "clicks" in data:
+            return data["clicks"]
+        else:
+            print(f"⚠️ Unexpected Dub format for slug '{slug}' — {data}")
             return 0
-
-        return clicks
 
     except Exception as e:
         print(f"❌ Exception fetching Dub clicks for '{slug}': {e}")
         return 0
+
 
 def update_notion(page_id, streak, last_active, clicks):
     try:
