@@ -91,7 +91,7 @@ def update_notion(page_id, streak, last_active, clicks):
     except Exception as e:
         print(f"❌ Notion update failed: {e}")
 
-def update_display_name(user_token, user_id, streak, clicks):
+def update_display_name(user_id, new_streak, clicks):
     try:
         client = SlackClient(token=user_token)
         profile = client.users_profile_get(user=user_id)["profile"]
