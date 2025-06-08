@@ -4,13 +4,14 @@ import requests
 from datetime import datetime, timezone
 from notion_client import Client as NotionClient
 from slack_sdk import WebClient as SlackClient
+from slack_sdk.errors import SlackApiError
 
 # Config
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DB_ID = os.getenv("NOTION_DB_ID")
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 DUB_API_KEY = os.getenv("DUB_API_KEY")
-USER_OAUTH_TOKEN = os.getenv("USER_OAUTH_TOKEN")
+USER_OAUTH_TOKEN = os.getenv("USER_OAUTH_TOKEN")  # For display name updates
 
 notion = NotionClient(auth=NOTION_TOKEN)
 slack = SlackClient(token=SLACK_BOT_TOKEN)
@@ -27,10 +28,21 @@ def get_channel_ids():
 def user_posted_today(user_id, channel_ids):
     today = datetime.now(timezone.utc).date()
     for cid in channel_ids:
-        time.sleep(1.5)
         try:
-            msgs = slack.conversations_history(channel=cid, limit=100)["messages"]
-            for msg in msgs:
+            while True:
+                try:
+                    res = slack.conversations_history(channel=cid, limit=100)
+                    break  # If successful, exit retry loop
+                except SlackApiError as e:
+                    if e.response.status_code == 429:
+                        retry_after = int(e.response.headers.get("Retry-After", 1))
+                        print(f"⏳ Rate limited, sleeping for {retry_after}s...")
+                        time.sleep(retry_after)
+                    else:
+                        raise
+
+            messages = res.get("messages", [])
+            for msg in messages:
                 if msg.get("user") == user_id:
                     ts = datetime.fromtimestamp(float(msg["ts"]), tz=timezone.utc).date()
                     if ts == today:
@@ -81,7 +93,8 @@ def update_display_name(user_id, streak):
     try:
         profile = user_slack.users_profile_get(user=user_id)["profile"]
         current_name = profile.get("display_name", "")
-        new_name = f"{current_name.split('⚡')[0].strip()} ⚡{streak}"
+        base_name = current_name.split("⚡")[0].strip()
+        new_name = f"{base_name} ⚡{streak}"
         user_slack.users_profile_set(user=user_id, profile={"display_name": new_name})
         print(f"🎯 Updated display name for {user_id} → {new_name}")
     except Exception as e:
@@ -95,40 +108,25 @@ def main():
     for page in pages:
         props = page["properties"]
 
-        # Slack ID
         slack_field = props.get("Slack ID", {}).get("rich_text", [])
         if not slack_field:
             print(f"⚠️ Skipping page {page['id']} — no Slack ID")
             continue
         user_id = slack_field[0]["text"]["content"]
 
-        # Streak count
         streak = props.get("Streak Count", {}).get("number", 0)
-
-        # Last active date
         last_str = props.get("Last Active Date", {}).get("date", {}).get("start")
         last_active = datetime.fromisoformat(last_str).date() if last_str else None
-
-        # Dub slug
         dub_url = props.get("Dub Link", {}).get("url", "")
         slug = dub_url.split("/")[-1] if "/" in dub_url else dub_url
-        slug = slug.strip()
 
-        # Post check
-        posted_today = user_posted_today(user_id, channel_ids)
-
-        if posted_today and last_active != today:
-            new_streak = streak + 1
-        elif posted_today:
-            new_streak = streak
-        else:
-            new_streak = 0
-
+        posted = user_posted_today(user_id, channel_ids)
+        new_streak = streak + 1 if posted and last_active != today else (0 if not posted else streak)
         clicks = get_clicks(slug)
+
         update_notion(page["id"], new_streak, today, clicks)
 
-        # Optional display name update
-        if user_id == "U08MWN65X8X":
+        if user_id == "U08MWN65X8X":  # Replace with your actual Slack ID
             update_display_name(user_id, new_streak)
 
         print(f"🔁 Updated {user_id} → Streak: {new_streak}, Clicks: {clicks}")
