@@ -8,11 +8,13 @@ from slack_sdk import WebClient as SlackClient
 # Config
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DB_ID = os.getenv("NOTION_DB_ID")
-SLACK_TOKEN = os.getenv("SLACK_BOT_TOKEN")
-DUB_API_KEY = "dub_Yu8qto7pB2VKlt7vyE7RRDEg"
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+DUB_API_KEY = os.getenv("DUB_API_KEY")
+USER_OAUTH_TOKEN = os.getenv("USER_OAUTH_TOKEN")  # <- NEW
 
 notion = NotionClient(auth=NOTION_TOKEN)
-slack = SlackClient(token=SLACK_TOKEN)
+slack = SlackClient(token=SLACK_BOT_TOKEN)
+user_slack = SlackClient(token=USER_OAUTH_TOKEN)  # <- NEW
 
 def get_channel_ids():
     channels = slack.conversations_list(types="public_channel").get("channels", [])
@@ -53,6 +55,20 @@ def update_notion(page_id, streak, last_active, clicks):
         }
     )
 
+def update_display_name(user_id, streak):
+    try:
+        profile = user_slack.users_profile_get(user=user_id)["profile"]
+        current_name = profile.get("display_name", "")
+        new_name = f"{current_name.split('🔥')[0].strip()} 🔥{streak}"
+
+        user_slack.users_profile_set(
+            user=user_id,
+            profile={"display_name": new_name}
+        )
+        print(f"🎯 Updated display name for {user_id} → {new_name}")
+    except Exception as e:
+        print(f"⚠️ Failed to update display name: {e}")
+
 def main():
     pages = notion.databases.query(database_id=NOTION_DB_ID)["results"]
     channel_ids = get_channel_ids()
@@ -73,6 +89,10 @@ def main():
         clicks = get_clicks(slug)
 
         update_notion(page["id"], new_streak, today, clicks)
+
+        if user_id == "YOUR_SLACK_USER_ID":  # <- replace with your ID
+            update_display_name(user_id, new_streak)
+
         print(f"🔁 Updated {user_id} → Streak: {new_streak}, Clicks: {clicks}")
 
 if __name__ == "__main__":
