@@ -42,12 +42,28 @@ def user_posted_today(user_id, channel_ids):
 
 def get_clicks(slug):
     try:
-        url = f"https://api.dub.co/analytics?event=clicks&groupBy=count&timezone=UTC&domain=friend.boardy.ai&key={slug}&interval=all"
+        url = (
+            "https://api.dub.co/analytics?"
+            f"event=clicks&groupBy=count&timezone=UTC&domain=friend.boardy.ai&key={slug}&interval=all"
+        )
         res = requests.get(url, headers={"Authorization": f"Bearer {DUB_API_KEY}"})
-        return res.json().get("totalCount", 0)
+        data = res.json()
+
+        if res.status_code != 200:
+            print(f"❌ Dub API status {res.status_code} for slug '{slug}' — {data}")
+            return 0
+
+        clicks = data.get("totalCount")
+        if clicks is None:
+            print(f"⚠️ No totalCount found for slug '{slug}' — full response: {data}")
+            return 0
+
+        return clicks
+
     except Exception as e:
-        print(f"Dub error for {slug}: {e}")
+        print(f"❌ Exception fetching Dub clicks for '{slug}': {e}")
         return 0
+
 
 def update_notion(page_id, streak, last_active, clicks):
     try:
