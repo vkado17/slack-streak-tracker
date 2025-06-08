@@ -129,6 +129,7 @@ def main():
         slug = dub_url.split("/")[-1] if "/" in dub_url else dub_url
 
         posted = user_posted_today(user_id, channel_ids)
+        print(f"Debug → posted: {posted}, last_active: {last_active}, today: {today}, current streak: {streak}")
         new_streak = streak + 1 if posted and last_active != today else (0 if not posted else streak)
         clicks = get_clicks(slug)
 
