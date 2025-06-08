@@ -10,7 +10,7 @@ NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DB_ID = os.getenv("NOTION_DB_ID")
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 DUB_API_KEY = os.getenv("DUB_API_KEY")
-USER_OAUTH_TOKEN = os.getenv("USER_OAUTH_TOKEN")  # For display name updates
+USER_OAUTH_TOKEN = os.getenv("USER_OAUTH_TOKEN")
 
 notion = NotionClient(auth=NOTION_TOKEN)
 slack = SlackClient(token=SLACK_BOT_TOKEN)
@@ -64,7 +64,6 @@ def get_clicks(slug):
         print(f"❌ Exception fetching Dub clicks for '{slug}': {e}")
         return 0
 
-
 def update_notion(page_id, streak, last_active, clicks):
     try:
         notion.pages.update(
@@ -82,7 +81,7 @@ def update_display_name(user_id, streak):
     try:
         profile = user_slack.users_profile_get(user=user_id)["profile"]
         current_name = profile.get("display_name", "")
-        new_name = f"{current_name.split('🔥')[0].strip()} 🔥{streak}"
+        new_name = f"{current_name.split('⚡')[0].strip()} ⚡{streak}"
         user_slack.users_profile_set(user=user_id, profile={"display_name": new_name})
         print(f"🎯 Updated display name for {user_id} → {new_name}")
     except Exception as e:
@@ -96,32 +95,40 @@ def main():
     for page in pages:
         props = page["properties"]
 
-        # Validate Slack ID
+        # Slack ID
         slack_field = props.get("Slack ID", {}).get("rich_text", [])
         if not slack_field:
             print(f"⚠️ Skipping page {page['id']} — no Slack ID")
             continue
         user_id = slack_field[0]["text"]["content"]
 
-        # Handle streak count
+        # Streak count
         streak = props.get("Streak Count", {}).get("number", 0)
 
-        # Handle last active date
+        # Last active date
         last_str = props.get("Last Active Date", {}).get("date", {}).get("start")
         last_active = datetime.fromisoformat(last_str).date() if last_str else None
 
-        # Handle Dub Link
+        # Dub slug
         dub_url = props.get("Dub Link", {}).get("url", "")
         slug = dub_url.split("/")[-1] if "/" in dub_url else dub_url
+        slug = slug.strip()
 
-        posted = user_posted_today(user_id, channel_ids)
-        new_streak = streak + 1 if posted and last_active != today else (0 if not posted else streak)
+        # Post check
+        posted_today = user_posted_today(user_id, channel_ids)
+
+        if posted_today and last_active != today:
+            new_streak = streak + 1
+        elif posted_today:
+            new_streak = streak
+        else:
+            new_streak = 0
+
         clicks = get_clicks(slug)
-
         update_notion(page["id"], new_streak, today, clicks)
 
-        # Only update display name if it's your own user
-        if user_id == "U08MWN65X8X":  # Replace with your actual Slack ID
+        # Optional display name update
+        if user_id == "U08MWN65X8X":
             update_display_name(user_id, new_streak)
 
         print(f"🔁 Updated {user_id} → Streak: {new_streak}, Clicks: {clicks}")
