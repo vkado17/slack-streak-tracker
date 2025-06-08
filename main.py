@@ -91,16 +91,22 @@ def update_notion(page_id, streak, last_active, clicks):
     except Exception as e:
         print(f"❌ Notion update failed: {e}")
 
-def update_display_name(user_id, streak):
+def update_display_name(user_token, user_id, streak, clicks):
     try:
-        profile = user_slack.users_profile_get(user=user_id)["profile"]
+        client = SlackClient(token=user_token)
+        profile = client.users_profile_get(user=user_id)["profile"]
         current_name = profile.get("display_name", "")
-        base_name = current_name.split("⚡")[0].strip()
-        new_name = f"{base_name} ⚡{streak}"
-        user_slack.users_profile_set(user=user_id, profile={"display_name": new_name})
-        print(f"🎯 Updated display name for {user_id} → {new_name}")
+        base_name = current_name.split("[")[0].strip()
+
+        new_display_name = f"{base_name} [𖦹{streak}, 𐀪𐀪{clicks}]"
+        client.users_profile_set(
+            user=user_id,
+            profile={"display_name": new_display_name}
+        )
+        print(f"🎯 Updated display name for {user_id} → {new_display_name}")
     except Exception as e:
         print(f"⚠️ Failed to update display name for {user_id}: {e}")
+
 
 def main():
     pages = notion.databases.query(database_id=NOTION_DB_ID)["results"]
