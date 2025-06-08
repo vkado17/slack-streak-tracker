@@ -32,7 +32,7 @@ def user_posted_today(user_id, channel_ids):
             while True:
                 try:
                     res = slack.conversations_history(channel=cid, limit=100)
-                    break  # If successful, exit retry loop
+                    break
                 except SlackApiError as e:
                     if e.response.status_code == 429:
                         retry_after = int(e.response.headers.get("Retry-After", 1))
@@ -40,7 +40,6 @@ def user_posted_today(user_id, channel_ids):
                         time.sleep(retry_after)
                     else:
                         raise
-
             messages = res.get("messages", [])
             for msg in messages:
                 if msg.get("user") == user_id:
@@ -77,7 +76,6 @@ def get_clicks(slug):
         print(f"❌ Exception fetching Dub clicks for '{slug}': {e}")
         return 0
 
-
 def update_notion(page_id, streak, last_active, clicks):
     try:
         notion.pages.update(
@@ -91,22 +89,19 @@ def update_notion(page_id, streak, last_active, clicks):
     except Exception as e:
         print(f"❌ Notion update failed: {e}")
 
-def update_display_name(user_id, new_streak, clicks):
+def update_display_name(user_id, streak, clicks):
     try:
-        client = SlackClient(token=user_token)
-        profile = client.users_profile_get(user=user_id)["profile"]
+        profile = user_slack.users_profile_get(user=user_id)["profile"]
         current_name = profile.get("display_name", "")
         base_name = current_name.split("[")[0].strip()
-
         new_display_name = f"{base_name} [𖦹{streak}, 𐀪𐀪{clicks}]"
-        client.users_profile_set(
+        user_slack.users_profile_set(
             user=user_id,
             profile={"display_name": new_display_name}
         )
         print(f"🎯 Updated display name for {user_id} → {new_display_name}")
     except Exception as e:
         print(f"⚠️ Failed to update display name for {user_id}: {e}")
-
 
 def main():
     pages = notion.databases.query(database_id=NOTION_DB_ID)["results"]
@@ -135,8 +130,8 @@ def main():
 
         update_notion(page["id"], new_streak, today, clicks)
 
-        if user_id == "U08MWN65X8X":  # Replace with your actual Slack ID
-            update_display_name(user_id, new_streak)
+        if user_id == "U08MWN65X8X":  # Replace with your Slack ID
+            update_display_name(user_id, new_streak, clicks)
 
         print(f"🔁 Updated {user_id} → Streak: {new_streak}, Clicks: {clicks}")
 
