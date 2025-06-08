@@ -10,15 +10,19 @@ NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DB_ID = os.getenv("NOTION_DB_ID")
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 DUB_API_KEY = os.getenv("DUB_API_KEY")
-USER_OAUTH_TOKEN = os.getenv("USER_OAUTH_TOKEN")  # <- NEW
+USER_OAUTH_TOKEN = os.getenv("USER_OAUTH_TOKEN")  # For display name updates
 
 notion = NotionClient(auth=NOTION_TOKEN)
 slack = SlackClient(token=SLACK_BOT_TOKEN)
-user_slack = SlackClient(token=USER_OAUTH_TOKEN)  # <- NEW
+user_slack = SlackClient(token=USER_OAUTH_TOKEN)
 
 def get_channel_ids():
-    channels = slack.conversations_list(types="public_channel").get("channels", [])
-    return [c["id"] for c in channels]
+    try:
+        channels = slack.conversations_list(types="public_channel").get("channels", [])
+        return [c["id"] for c in channels]
+    except Exception as e:
+        print(f"❌ Error fetching channels: {e}")
+        return []
 
 def user_posted_today(user_id, channel_ids):
     today = datetime.now(timezone.utc).date()
@@ -46,51 +50,62 @@ def get_clicks(slug):
         return 0
 
 def update_notion(page_id, streak, last_active, clicks):
-    notion.pages.update(
-        page_id=page_id,
-        properties={
-            "Streak Count": {"number": streak},
-            "Last Active": {"date": {"start": last_active.isoformat()}},
-            "Dub Clicks": {"number": clicks}
-        }
-    )
+    try:
+        notion.pages.update(
+            page_id=page_id,
+            properties={
+                "Streak Count": {"number": streak},
+                "Last Active Date": {"date": {"start": last_active.isoformat()}},
+                "Dub Clicks": {"number": clicks}
+            }
+        )
+    except Exception as e:
+        print(f"❌ Notion update failed: {e}")
 
 def update_display_name(user_id, streak):
     try:
         profile = user_slack.users_profile_get(user=user_id)["profile"]
         current_name = profile.get("display_name", "")
         new_name = f"{current_name.split('🔥')[0].strip()} 🔥{streak}"
-
-        user_slack.users_profile_set(
-            user=user_id,
-            profile={"display_name": new_name}
-        )
+        user_slack.users_profile_set(user=user_id, profile={"display_name": new_name})
         print(f"🎯 Updated display name for {user_id} → {new_name}")
     except Exception as e:
-        print(f"⚠️ Failed to update display name: {e}")
+        print(f"⚠️ Failed to update display name for {user_id}: {e}")
 
 def main():
     pages = notion.databases.query(database_id=NOTION_DB_ID)["results"]
     channel_ids = get_channel_ids()
+    today = datetime.now().date()
 
     for page in pages:
         props = page["properties"]
-        user_id = props["Slack ID"]["rich_text"][0]["text"]["content"]
-        streak = props["Streak Count"].get("number", 0)
-        last_str = props["Last Active"]["date"]["start"]
+
+        # Validate Slack ID
+        slack_field = props.get("Slack ID", {}).get("rich_text", [])
+        if not slack_field:
+            print(f"⚠️ Skipping page {page['id']} — no Slack ID")
+            continue
+        user_id = slack_field[0]["text"]["content"]
+
+        # Handle streak count
+        streak = props.get("Streak Count", {}).get("number", 0)
+
+        # Handle last active date
+        last_str = props.get("Last Active Date", {}).get("date", {}).get("start")
         last_active = datetime.fromisoformat(last_str).date() if last_str else None
-        dub_url = props["Dub Link"].get("url", "")
-        slug = dub_url.split("/")[-1]
 
-        today = datetime.now().date()
+        # Handle Dub Link
+        dub_url = props.get("Dub Link", {}).get("url", "")
+        slug = dub_url.split("/")[-1] if "/" in dub_url else dub_url
+
         posted = user_posted_today(user_id, channel_ids)
-
         new_streak = streak + 1 if posted and last_active != today else (0 if not posted else streak)
         clicks = get_clicks(slug)
 
         update_notion(page["id"], new_streak, today, clicks)
 
-        if user_id == "YOUR_SLACK_USER_ID":  # <- replace with your ID
+        # Only update display name if it's your own user
+        if user_id == "U08MWN65X8X":  # Replace with your actual Slack ID
             update_display_name(user_id, new_streak)
 
         print(f"🔁 Updated {user_id} → Streak: {new_streak}, Clicks: {clicks}")
