@@ -11,11 +11,9 @@ NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DB_ID = os.getenv("NOTION_DB_ID")
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 DUB_API_KEY = os.getenv("DUB_API_KEY")
-USER_OAUTH_TOKEN = os.getenv("USER_OAUTH_TOKEN")  # For display name updates
 
 notion = NotionClient(auth=NOTION_TOKEN)
 slack = SlackClient(token=SLACK_BOT_TOKEN)
-user_slack = SlackClient(token=USER_OAUTH_TOKEN)
 
 def get_channel_ids():
     try:
@@ -59,19 +57,10 @@ def get_clicks(slug):
         )
         res = requests.get(url, headers={"Authorization": f"Bearer {DUB_API_KEY}"})
         data = res.json()
-
         if res.status_code != 200:
             print(f"❌ Dub API status {res.status_code} for slug '{slug}' — {data}")
             return 0
-
-        if "totalCount" in data:
-            return data["totalCount"]
-        elif "clicks" in data:
-            return data["clicks"]
-        else:
-            print(f"⚠️ Unexpected Dub format for slug '{slug}' — {data}")
-            return 0
-
+        return data.get("totalCount") or data.get("clicks") or 0
     except Exception as e:
         print(f"❌ Exception fetching Dub clicks for '{slug}': {e}")
         return 0
@@ -89,13 +78,14 @@ def update_notion(page_id, streak, last_active, clicks):
     except Exception as e:
         print(f"❌ Notion update failed: {e}")
 
-def update_display_name(user_id, streak, clicks):
+def update_display_name(user_id, streak, clicks, user_token):
     try:
-        profile = user_slack.users_profile_get(user=user_id)["profile"]
+        client = SlackClient(token=user_token)
+        profile = client.users_profile_get(user=user_id)["profile"]
         current_name = profile.get("display_name", "")
         base_name = current_name.split("[")[0].strip()
         new_display_name = f"{base_name} [𖦹{streak}, 𐀪𐀪{clicks}]"
-        user_slack.users_profile_set(
+        client.users_profile_set(
             user=user_id,
             profile={"display_name": new_display_name}
         )
@@ -117,6 +107,9 @@ def main():
             continue
         user_id = slack_field[0]["text"]["content"]
 
+        user_token = props.get("User Token", {}).get("rich_text", [])
+        user_token = user_token[0]["text"]["content"] if user_token else None
+
         streak = props.get("Streak Count", {}).get("number", 0)
         last_str = props.get("Last Active Date", {}).get("date", {}).get("start")
         last_active = datetime.fromisoformat(last_str).date() if last_str else None
@@ -130,8 +123,8 @@ def main():
 
         update_notion(page["id"], new_streak, today, clicks)
 
-        if user_id == "U08MWN65X8X":  # Replace with your Slack ID
-            update_display_name(user_id, new_streak, clicks)
+        if user_token:
+            update_display_name(user_id, new_streak, clicks, user_token)
 
         print(f"🔁 Updated {user_id} → Streak: {new_streak}, Clicks: {clicks}")
 
