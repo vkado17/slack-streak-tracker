@@ -88,8 +88,18 @@ def update_display_name(user_id, streak, clicks, user_token):
     try:
         client = SlackClient(token=user_token)
         profile = client.users_profile_get(user=user_id)["profile"]
-        raw_display = profile.get("display_name") or profile.get("real_name") or ""
-        base_name = clean_name(raw_display)
+        display_name = profile.get("display_name", "")
+        real_name = profile.get("real_name", "")
+
+        # Fallback if display_name is empty or just the tag itself
+        base_name = display_name.strip()
+        if not base_name or base_name.startswith("[𖦹"):
+            base_name = real_name.strip()
+
+        # Remove previous suffix if exists
+        if "[" in base_name:
+            base_name = base_name.split("[")[0].strip()
+
         new_display_name = f"{base_name} [𖦹{streak}, 𐀪𐀪{clicks}]"
 
         client.users_profile_set(
@@ -99,6 +109,7 @@ def update_display_name(user_id, streak, clicks, user_token):
         print(f"🎯 Updated display name for {user_id} → {new_display_name}")
     except Exception as e:
         print(f"⚠️ Failed to update display name for {user_id}: {e}")
+
 
 def main():
     pages = notion.databases.query(database_id=NOTION_DB_ID)["results"]
