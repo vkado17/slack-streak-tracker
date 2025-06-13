@@ -78,13 +78,20 @@ def update_notion(page_id, streak, last_active, clicks):
     except Exception as e:
         print(f"❌ Notion update failed: {e}")
 
+def clean_name(name):
+    # Remove any previous tag like [𖦹x, 𐀪𐀪y]
+    if "[" in name and "]" in name:
+        return name[:name.rfind("[")].strip()
+    return name.strip()
+
 def update_display_name(user_id, streak, clicks, user_token):
     try:
         client = SlackClient(token=user_token)
         profile = client.users_profile_get(user=user_id)["profile"]
-        current_name = profile.get("display_name", "")
-        base_name = current_name.split("[")[0].strip()
+        raw_display = profile.get("display_name") or profile.get("real_name") or ""
+        base_name = clean_name(raw_display)
         new_display_name = f"{base_name} [𖦹{streak}, 𐀪𐀪{clicks}]"
+
         client.users_profile_set(
             user=user_id,
             profile={"display_name": new_display_name}
@@ -107,8 +114,8 @@ def main():
             continue
         user_id = slack_field[0]["text"]["content"]
 
-        user_token = props.get("User Token", {}).get("rich_text", [])
-        user_token = user_token[0]["text"]["content"] if user_token else None
+        user_token_field = props.get("User Token", {}).get("rich_text", [])
+        user_token = user_token_field[0]["text"]["content"] if user_token_field else None
 
         streak = props.get("Streak Count", {}).get("number", 0)
         last_str = props.get("Last Active Date", {}).get("date", {}).get("start")
