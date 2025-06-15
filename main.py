@@ -103,7 +103,7 @@ def update_display_name(user_id, streak, clicks, user_token):
 def main():
     pages = notion.databases.query(database_id=NOTION_DB_ID)["results"]
     channel_ids = get_channel_ids()
-    today = datetime.now().date()
+    today = datetime.now(timezone.utc).date()
 
     for page in pages:
         props = page["properties"]
