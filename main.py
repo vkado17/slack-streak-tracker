@@ -1,7 +1,8 @@
 import os
 import time
 import requests
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from pytz import timezone as pytz_timezone
 from notion_client import Client as NotionClient
 from slack_sdk import WebClient as SlackClient
 from slack_sdk.errors import SlackApiError
@@ -14,6 +15,7 @@ DUB_API_KEY = os.getenv("DUB_API_KEY")
 
 notion = NotionClient(auth=NOTION_TOKEN)
 slack = SlackClient(token=SLACK_BOT_TOKEN)
+PDT = pytz_timezone("America/Los_Angeles")
 
 def get_channel_ids():
     try:
@@ -40,7 +42,7 @@ def user_posted_on(user_id, channel_ids, target_date):
             messages = res.get("messages", [])
             for msg in messages:
                 if msg.get("user") == user_id:
-                    ts = datetime.fromtimestamp(float(msg["ts"]), tz=timezone.utc).date()
+                    ts = datetime.fromtimestamp(float(msg["ts"]), tz=PDT).date()
                     if ts == target_date:
                         print(f"✅ Found message from {user_id} in channel {cid} on {ts}")
                         return True
@@ -101,7 +103,7 @@ def update_display_name(user_id, streak, clicks, user_token):
 def main():
     pages = notion.databases.query(database_id=NOTION_DB_ID)["results"]
     channel_ids = get_channel_ids()
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(PDT).date()
     yesterday = today - timedelta(days=1)
     day_before_yesterday = today - timedelta(days=2)
 
