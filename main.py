@@ -1,7 +1,7 @@
 import os
 import time
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from notion_client import Client as NotionClient
 from slack_sdk import WebClient as SlackClient
 from slack_sdk.errors import SlackApiError
@@ -79,7 +79,6 @@ def update_notion(page_id, streak, last_active, clicks):
         print(f"❌ Notion update failed: {e}")
 
 def clean_name(name):
-    # Remove any previous tag like [𖦹x, 𐀪𐀪y]
     if "[" in name and "]" in name:
         return name[:name.rfind("[")].strip()
     return name.strip()
@@ -91,17 +90,13 @@ def update_display_name(user_id, streak, clicks, user_token):
         display_name = profile.get("display_name", "")
         real_name = profile.get("real_name", "")
 
-        # Fallback if display_name is empty or just the tag itself
         base_name = display_name.strip()
         if not base_name or base_name.startswith("[𖦹"):
             base_name = real_name.strip()
-
-        # Remove previous suffix if exists
         if "[" in base_name:
             base_name = base_name.split("[")[0].strip()
 
         new_display_name = f"{base_name} [𖦹{streak}, 𐀪𐀪{clicks}]"
-
         client.users_profile_set(
             user=user_id,
             profile={"display_name": new_display_name}
@@ -109,7 +104,6 @@ def update_display_name(user_id, streak, clicks, user_token):
         print(f"🎯 Updated display name for {user_id} → {new_display_name}")
     except Exception as e:
         print(f"⚠️ Failed to update display name for {user_id}: {e}")
-
 
 def main():
     pages = notion.databases.query(database_id=NOTION_DB_ID)["results"]
@@ -136,9 +130,16 @@ def main():
 
         posted = user_posted_today(user_id, channel_ids)
         print(f"Debug → posted: {posted}, last_active: {last_active}, today: {today}, current streak: {streak}")
-        new_streak = streak + 1 if posted and last_active != today else (0 if not posted else streak)
-        clicks = get_clicks(slug)
 
+        if posted:
+            if last_active == today - timedelta(days=1):
+                new_streak = streak + 1
+            else:
+                new_streak = 1
+        else:
+            new_streak = 0
+
+        clicks = get_clicks(slug)
         update_notion(page["id"], new_streak, today, clicks)
 
         if user_token:
