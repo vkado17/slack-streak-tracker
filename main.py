@@ -23,8 +23,7 @@ def get_channel_ids():
         print(f"❌ Error fetching channels: {e}")
         return []
 
-def user_posted_today(user_id, channel_ids):
-    today = datetime.now(timezone.utc).date()
+def user_posted_on(user_id, channel_ids, target_date):
     for cid in channel_ids:
         try:
             while True:
@@ -42,8 +41,8 @@ def user_posted_today(user_id, channel_ids):
             for msg in messages:
                 if msg.get("user") == user_id:
                     ts = datetime.fromtimestamp(float(msg["ts"]), tz=timezone.utc).date()
-                    if ts == today:
-                        print(f"✅ Found message from {user_id} in channel {cid}")
+                    if ts == target_date:
+                        print(f"✅ Found message from {user_id} in channel {cid} on {ts}")
                         return True
         except Exception as e:
             print(f"Slack error in channel {cid}: {e}")
@@ -67,14 +66,13 @@ def get_clicks(slug):
 
 def update_notion(page_id, streak, last_active, clicks):
     try:
-        notion.pages.update(
-            page_id=page_id,
-            properties={
-                "Streak Count": {"number": streak},
-                "Last Active Date": {"date": {"start": last_active.isoformat()}},
-                "Dub Clicks": {"number": clicks}
-            }
-        )
+        properties = {
+            "Streak Count": {"number": streak},
+            "Dub Clicks": {"number": clicks}
+        }
+        if last_active:
+            properties["Last Active Date"] = {"date": {"start": last_active.isoformat()}}
+        notion.pages.update(page_id=page_id, properties=properties)
     except Exception as e:
         print(f"❌ Notion update failed: {e}")
 
@@ -104,6 +102,8 @@ def main():
     pages = notion.databases.query(database_id=NOTION_DB_ID)["results"]
     channel_ids = get_channel_ids()
     today = datetime.now(timezone.utc).date()
+    yesterday = today - timedelta(days=1)
+    day_before_yesterday = today - timedelta(days=2)
 
     for page in pages:
         props = page["properties"]
@@ -123,15 +123,15 @@ def main():
         dub_url = props.get("Dub Link", {}).get("url", "")
         slug = dub_url.split("/")[-1] if "/" in dub_url else dub_url
 
-        posted = user_posted_today(user_id, channel_ids)
-        print(f"Debug → posted: {posted}, last_active: {last_active}, today: {today}, current streak: {streak}")
+        posted_yesterday = user_posted_on(user_id, channel_ids, yesterday)
+        print(f"Debug → posted_yesterday: {posted_yesterday}, last_active: {last_active}, streak: {streak}")
 
-        if posted:
-            if last_active == today - timedelta(days=1):
+        if posted_yesterday:
+            if last_active == day_before_yesterday:
                 new_streak = streak + 1
             else:
                 new_streak = 1
-            update_notion(page["id"], new_streak, today, get_clicks(slug))
+            update_notion(page["id"], new_streak, yesterday, get_clicks(slug))
         else:
             new_streak = 0
             update_notion(page["id"], new_streak, last_active, get_clicks(slug))
