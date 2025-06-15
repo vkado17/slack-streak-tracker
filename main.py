@@ -78,11 +78,6 @@ def update_notion(page_id, streak, last_active, clicks):
     except Exception as e:
         print(f"❌ Notion update failed: {e}")
 
-def clean_name(name):
-    if "[" in name and "]" in name:
-        return name[:name.rfind("[")].strip()
-    return name.strip()
-
 def update_display_name(user_id, streak, clicks, user_token):
     try:
         client = SlackClient(token=user_token)
@@ -136,16 +131,15 @@ def main():
                 new_streak = streak + 1
             else:
                 new_streak = 1
+            update_notion(page["id"], new_streak, today, get_clicks(slug))
         else:
             new_streak = 0
-
-        clicks = get_clicks(slug)
-        update_notion(page["id"], new_streak, today, clicks)
+            update_notion(page["id"], new_streak, last_active, get_clicks(slug))
 
         if user_token:
-            update_display_name(user_id, new_streak, clicks, user_token)
+            update_display_name(user_id, new_streak, get_clicks(slug), user_token)
 
-        print(f"🔁 Updated {user_id} → Streak: {new_streak}, Clicks: {clicks}")
+        print(f"🔁 Updated {user_id} → Streak: {new_streak}, Clicks: {get_clicks(slug)}")
 
 if __name__ == "__main__":
     main()
