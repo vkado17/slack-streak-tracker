@@ -91,7 +91,7 @@ def update_display_name(user_id, streak, clicks, user_token):
         if "[" in base_name:
             base_name = base_name.split("[")[0].strip()
 
-        new_display_name = f"{base_name} [𖦹{streak}, 𐀪𐀪{clicks}]"
+        new_display_name = f"{base_name} [ঌ{streak}, 𐀪𐀪{clicks}]"
         client.users_profile_set(
             user=user_id,
             profile={"display_name": new_display_name}
